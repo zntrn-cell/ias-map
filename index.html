@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="origin">
+  <title>アメリカオニアザミ 駆除作戦マップ</title>
+  <!-- Leaflet CSS (地図表示用ライブラリ) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Meiryo", sans-serif; display: flex; flex-direction: column; height: 100vh; color: #222; }
+    
+    /* ヘッダー */
+    header {
+      background: #2e5a27; color: #fff; padding: 10px 14px;
+      display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px;
+      z-index: 1000; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .app-title { font-size: 16px; font-weight: bold; display: flex; align-items: center; gap: 6px; }
+    .header-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn-header {
+      background: #fff; color: #2e5a27; border: none; padding: 6px 10px;
+      border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer;
+    }
+    .btn-header.test-mode { background: #ffeb3b; color: #333; }
+    .btn-header.test-mode.other-user { background: #ff9800; color: #fff; }
+
+    /* ステータスバー（凡例・フィルター） */
+    .status-bar {
+      background: #f4f6f4; padding: 6px 14px; font-size: 12px;
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
+      border-bottom: 1px solid #ddd; z-index: 999;
+    }
+    .legend { display: flex; gap: 12px; align-items: center; font-weight: bold; flex-wrap: wrap; }
+    .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+    .dot-red { background: #e53935; border: 2px solid #fff; box-shadow: 0 0 2px #000; }
+    .dot-yellow { background: #fbc02d; border: 2px solid #fff; box-shadow: 0 0 2px #000; }
+    .dot-green { background: #43a047; border: 2px solid #fff; box-shadow: 0 0 2px #000; }
+    .dot-gray { background: #9e9e9e; border: 2px solid #fff; box-shadow: 0 0 2px #000; }
+    .sync-badge { font-size: 11px; color: #2e5a27; background: #e8f5e9; padding: 2px 8px; border-radius: 12px; border: 1px solid #a5d6a7; }
+
+    /* マップ領域 */
+    #map { flex: 1; width: 100%; cursor: crosshair; }
+
+    /* 現在地へ移動するフローティングボタン（右下） */
+    .gps-btn {
+      position: fixed; bottom: 24px; right: 16px; z-index: 1000;
+      background: #fff; color: #2e5a27; border: 2px solid #2e5a27;
+      border-radius: 30px; padding: 10px 16px; font-size: 14px; font-weight: bold;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3); cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .gps-btn:active { transform: scale(0.96); background: #f1f8e9; }
+
+    /* 現在地を示す青い丸アイコン */
+    .current-loc-dot {
+      width: 18px; height: 18px; background: #1e88e5; border: 3px solid #fff;
+      border-radius: 50%; box-shadow: 0 0 0 6px rgba(30, 136, 229, 0.28), 0 2px 5px rgba(0,0,0,0.4);
+    }
+
+    /* カスタムピンアイコン */
+    .custom-pin {
+      width: 24px; height: 24px; border-radius: 50%; border: 3px solid #fff;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 11px; font-weight: bold;
+    }
+    .pin-unprocessed { background: #e53935; }
+    .pin-private { background: #fbc02d; color: #222; }
+    .pin-eradicated { background: #43a047; }
+    .pin-canceled { background: #9e9e9e; opacity: 0.65; }
+
+    /* モーダル共通 */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.55); display: none; justify-content: center; align-items: center;
+      z-index: 2000; padding: 14px;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-card {
+      background: #fff; width: 100%; max-width: 480px; max-height: 90vh;
+      border-radius: 12px; padding: 18px; overflow-y: auto;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+    .modal-title { font-size: 17px; font-weight: bold; color: #2e5a27; }
+    .close-btn { background: none; border: none; font-size: 22px; cursor: pointer; color: #666; }
+
+    /* フォーム要素 */
+    .form-group { margin-bottom: 14px; }
+    .form-label { display: block; font-size: 13px; font-weight: bold; margin-bottom: 6px; color: #333; }
+    .auto-info { font-size: 12px; color: #555; background: #f8f9fa; padding: 8px; border-radius: 6px; border: 1px solid #e0e0e0; }
+    .privacy-note { font-size: 11px; color: #d32f2f; background: #ffebee; padding: 8px; border-radius: 6px; margin-top: 6px; line-height: 1.4; }
+    
+    .radio-group { display: flex; flex-direction: column; gap: 6px; }
+    .radio-option {
+      display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+      border: 1px solid #ccc; border-radius: 8px; cursor: pointer; font-size: 14px;
+    }
+    .radio-option:hover { background: #f1f8e9; border-color: #81c784; }
+    .radio-option input { transform: scale(1.2); }
+
+    textarea, input[type="text"], input[type="password"] {
+      width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px;
+    }
+    .photo-preview { width: 100%; max-height: 180px; object-fit: cover; border-radius: 8px; margin-top: 8px; display: none; border: 1px solid #ddd; }
+
+    /* ボタン群 */
+    .btn-primary { width: 100%; background: #2e5a27; color: #fff; border: none; padding: 12px; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-secondary { width: 100%; background: #e0e0e0; color: #333; border: none; padding: 10px; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; margin-top: 8px; }
+    .btn-success { width: 100%; background: #43a047; color: #fff; border: none; padding: 10px; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; margin-top: 8px; }
+    .btn-warning { width: 100%; background: #757575; color: #fff; border: none; padding: 10px; border-radius: 8px; font-size: 13px; cursor: pointer; margin-top: 8px; }
+    .btn-danger { width: 100%; background: #fff; color: #d32f2f; border: 1px solid #d32f2f; padding: 9px; border-radius: 8px; font-size: 13px; cursor: pointer; margin-top: 12px; }
+
+    /* 詳細表示用 */
+    .detail-badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; color: #fff; margin-bottom: 10px; }
+    .badge-red { background: #e53935; }
+    .badge-yellow { background: #fbc02d; color: #222; }
+    .badge-green { background: #43a047; }
+    .badge-gray { background: #757575; }
+    .detail-box { background: #f9f9f9; padding: 12px; border-radius: 8px; font-size: 14px; line-height: 1.6; margin-bottom: 12px; border: 1px solid #eee; }
+    .help-section { margin-bottom: 14px; font-size: 13px; line-height: 1.6; }
+    .help-section h4 { color: #2e5a27; margin-bottom: 6px; font-size: 14px; border-left: 4px solid #2e5a27; padding-left: 6px; }
+    .help-gallery { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0 12px; }
+    .help-photo-card { border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: #fafafa; font-size: 11px; }
+    .help-photo-card img { width: 100%; height: 110px; object-fit: cover; display: block; cursor: zoom-in; }
+    .help-photo-caption { padding: 5px 6px; line-height: 1.3; color: #333; font-weight: bold; }
+    .compare-box { background: #f1f8e9; border: 1px solid #c5e1a5; border-radius: 8px; padding: 10px; margin-top: 6px; font-size: 12px; }
+  </style>
+</head>
+<body>
+
+  <!-- ヘッダー（タイトルを10回連続クリックで管理者ログイン） -->
+  <header>
+    <div class="app-title" onclick="handleTitleClick()" style="cursor:pointer; user-select:none;" title="">🌿 アメリカオニアザミ 駆除作戦マップ</div>
+    <div class="header-btns">
+      <button id="adminPanelBtn" class="btn-header" style="display:none; background:#d32f2f; color:#fff;" onclick="openAdminModal()">🛠️ 管理者パネル</button>
+      <button id="toggleUserBtn" class="btn-header test-mode" style="display:none;" onclick="toggleTestUser()">👤 現在：投稿者本人モード</button>
+      <button class="btn-header" onclick="openHelpModal()">[?] 見分け方・注意点</button>
+    </div>
+  </header>
+
+  <!-- 凡例・ステータスバー -->
+  <div class="status-bar">
+    <div class="legend">
+      <span><span class="dot dot-red"></span>未駆除(公共): <span id="countRed">0</span></span>
+      <span><span class="dot dot-yellow"></span>未駆除(私有地): <span id="countYellow">0</span></span>
+      <span><span class="dot dot-green"></span>駆除済: <span id="countGreen">0</span></span>
+      <span><span class="dot dot-gray"></span>取消: <span id="countGray">0</span></span>
+      <span id="syncStatus" class="sync-badge">🔄 データ読込中...</span>
+    </div>
+    <div>
+      <label style="cursor:pointer;">
+        <input type="checkbox" id="showCanceledToggle" checked onchange="renderPins()"> 取消ピンも表示
+      </label>
+    </div>
+  </div>
+
+  <!-- 地図本体 -->
+  <div id="map"></div>
+  <button id="gpsBtn" class="gps-btn" onclick="moveToCurrentLocation()">📍 現在地へ移動</button>
+
+  <!-- ① 新規記録モーダル（1画面完結） -->
+  <div id="formModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">📍 アメリカオニアザミを記録</div>
+        <button class="close-btn" onclick="closeFormModal()">×</button>
+      </div>
+
+      <div class="form-group">
+        <div class="auto-info" id="autoMetaInfo">日時・位置情報を自動取得中...</div>
+      </div>
+
+      <!-- 写真添付 -->
+      <div class="form-group">
+        <label class="form-label">📷 写真（任意・見分け確認のため推奨）</label>
+        <input type="file" id="photoInput" accept="image/*" capture="environment" onchange="previewPhoto(event)">
+        <img id="photoPreview" class="photo-preview" alt="プレビュー">
+        <div class="privacy-note">
+          ⚠️ <strong>プライバシー注意：</strong>個人の住宅・表札・洗濯物・車のナンバー・通行人などが写り込まないよう、植物に近づいて撮影してください。
+        </div>
+      </div>
+
+      <!-- 生育状態（①〜④） -->
+      <div class="form-group">
+        <label class="form-label">🌱 生育状態（①〜④から選択）</label>
+        <div class="radio-group">
+          <label class="radio-option"><input type="radio" name="stage" value="① 地面に広がる葉" checked> ① 地面に広がる葉</label>
+          <label class="radio-option"><input type="radio" name="stage" value="② 茎が伸びている・つぼみ"> ② 茎が伸びている・つぼみ</label>
+          <label class="radio-option"><input type="radio" name="stage" value="③ 花が咲いている"> ③ 花が咲いている</label>
+          <label class="radio-option"><input type="radio" name="stage" value="④ 綿毛・種ができている"> ④ 綿毛・種ができている</label>
+        </div>
+      </div>
+
+      <!-- 規模（株数） -->
+      <div class="form-group">
+        <label class="form-label">📊 規模（おおよその株数）</label>
+        <div class="radio-group">
+          <label class="radio-option"><input type="radio" name="scale" value="1〜5株（単体・少数）" checked> 1〜5株（単体・少数）</label>
+          <label class="radio-option"><input type="radio" name="scale" value="6〜20株（小群落）"> 6〜20株（小群落）</label>
+          <label class="radio-option"><input type="radio" name="scale" value="21株以上（大群落）"> 21株以上（大群落）</label>
+        </div>
+      </div>
+
+      <!-- 対応状況 -->
+      <div class="form-group">
+        <label class="form-label">🛠️ 現在の対応状況・場所の区分</label>
+        <div class="radio-group">
+          <label class="radio-option"><input type="radio" name="status" value="unprocessed" checked> 🔴 未駆除：公共の場所（誰でも駆除OK・応援求む）</label>
+          <label class="radio-option"><input type="radio" name="status" value="private_unprocessed"> 🟡 未駆除：私有地・個人宅内（無断立入NG・所有者または声かけ後に駆除）</label>
+          <label class="radio-option"><input type="radio" name="status" value="eradicated"> 🟢 駆除済み（その場で駆除完了）</label>
+        </div>
+      </div>
+
+      <!-- メモ -->
+      <div class="form-group">
+        <label class="form-label">📝 メモ（任意：場所の目印や状況など）</label>
+        <textarea id="memoInput" rows="2" placeholder="例：歩道の植え込みの端。スコップがあると抜きやすいです。"></textarea>
+      </div>
+
+      <button id="submitPinBtn" class="btn-primary" onclick="trySubmitPin()">この内容でマップに記録する</button>
+    </div>
+  </div>
+
+  <!-- ② 写真なし確認ポップアップ（任意だが推奨のクッション画面） -->
+  <div id="noPhotoModal" class="modal-overlay">
+    <div class="modal-card" style="max-width: 380px; text-align: center;">
+      <h3 style="color:#d32f2f; margin-bottom:10px;">📷 写真が添付されていません</h3>
+      <p style="font-size:13px; line-height:1.6; margin-bottom:16px; color:#444;">
+        在来種（ノアザミ等）との見間違いを防ぐため、できる限り写真の添付をお願いしています。<br>このまま写真なしで記録しますか？
+      </p>
+      <button class="btn-primary" onclick="closeNoPhotoModal()">戻って写真を選ぶ</button>
+      <button class="btn-secondary" onclick="confirmSubmitPin()">写真なしで記録する</button>
+    </div>
+  </div>
+
+  <!-- ③ ピン詳細・駆除追記・取消・削除モーダル -->
+  <div id="detailModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">📌 記録の詳細・ステータス更新</div>
+        <button class="close-btn" onclick="closeDetailModal()">×</button>
+      </div>
+      <div id="detailContent"></div>
+
+      <!-- 駆除報告フォーム（ボタンを押した時に開く） -->
+      <div id="eradicateFormBox" style="display:none; margin-top:12px; padding-top:12px; border-top:2px dashed #43a047;">
+        <div style="font-weight:bold; color:#2e5a27; margin-bottom:10px; font-size:15px;">🟢 駆除報告の入力</div>
+        <div class="form-group">
+          <label class="form-label">📷 駆除後の写真（任意・抜き取った跡や袋詰めした写真など）</label>
+          <input type="file" id="eradicatePhotoInput" accept="image/*" capture="environment" onchange="previewEradicatePhoto(event)">
+          <img id="eradicatePhotoPreview" class="photo-preview" alt="駆除後プレビュー">
+          <div class="privacy-note">
+            ⚠️ <strong>プライバシー注意：</strong>住宅・表札・車のナンバー・通行人などが写り込まないようご注意ください。
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">📝 駆除メモ（任意）</label>
+          <textarea id="eradicateMemoInput" rows="2" placeholder="例：根から抜き取り、ビニール袋に密閉して処分しました。"></textarea>
+        </div>
+        <button id="submitEradicateBtn" class="btn-success" onclick="submitEradication()">この内容で駆除完了にする</button>
+        <button class="btn-secondary" onclick="cancelEradicateForm()">キャンセル</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ④ 見分け方・注意点ヘルプモーダル（複数枚の写真ギャラリー付き） -->
+  <div id="helpModal" class="modal-overlay">
+    <div class="modal-card" style="max-width: 540px;">
+      <div class="modal-header">
+        <div class="modal-title">📖 見分け方と駆除・撮影の注意点</div>
+        <button class="close-btn" onclick="closeHelpModal()">×</button>
+      </div>
+
+      <div class="help-section">
+        <h4>1. 写真で見るアメリカオニアザミ（クリックで拡大）</h4>
+        <div class="help-gallery">
+          <div class="help-photo-card">
+            <img src="https://commons.wikimedia.org/wiki/Special:Redirect/file/Cirsium_vulgare,_Speerdistel_bladrozet.jpg?width=800" alt="① 地面に広がる葉（ロゼット） / &quot;Cirsium vulgare, Speerdistel bladrozet&quot; by Rasbak (CC BY-SA 3.0)" onclick="zoomHelpPhoto(this.src, this.alt)">
+            <div class="help-photo-caption">
+              ① 地面に広がる葉（ロゼット）<br>
+              <span style="font-weight:normal; color:#555;">葉が3Dに波打ち表面もトゲ毛だらけ</span><br>
+              <span style="font-weight:normal; font-size:9px; color:#777; display:block; margin-top:2px;">
+                "<a href="https://commons.wikimedia.org/wiki/File:Cirsium_vulgare,_Speerdistel_bladrozet.jpg" target="_blank" rel="noopener" style="color:#555;">Cirsium vulgare, Speerdistel bladrozet</a>" by Rasbak (<a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener" style="color:#555;">CC BY-SA 3.0</a>)
+              </span>
+            </div>
+          </div>
+          <div class="help-photo-card">
+            <img src="https://commons.wikimedia.org/wiki/Special:Redirect/file/Cirsium_vulgare_StemandLeaves_15August2009_LagunadeCaracuel.jpg?width=800" alt="② 茎のトゲ付きヒレ（翼） / &quot;Cirsium vulgare StemandLeaves...&quot; by Javier martin (Public Domain)" onclick="zoomHelpPhoto(this.src, this.alt)">
+            <div class="help-photo-caption">
+              ② 茎のトゲ付きヒレ（翼）<br>
+              <span style="font-weight:normal; color:#555;">茎自体にもトゲのヒレが縦に付く</span><br>
+              <span style="font-weight:normal; font-size:9px; color:#777; display:block; margin-top:2px;">
+                "<a href="https://commons.wikimedia.org/wiki/File:Cirsium_vulgare_StemandLeaves_15August2009_LagunadeCaracuel.jpg" target="_blank" rel="noopener" style="color:#555;">Cirsium vulgare StemandLeaves...</a>" by Javier martin (Public Domain)
+              </span>
+            </div>
+          </div>
+          <div class="help-photo-card">
+            <img src="https://commons.wikimedia.org/wiki/Special:Redirect/file/Cirsium_vulgare_flower.jpg?width=800" alt="③ 花と針山のようなガク（総苞） / &quot;Cirsium vulgare flower&quot; by Bidgee (CC BY-SA 3.0)" onclick="zoomHelpPhoto(this.src, this.alt)">
+            <div class="help-photo-caption">
+              ③ 花と針山のようなガク<br>
+              <span style="font-weight:normal; color:#555;">花の下に鋭いトゲが密生（粘らない）</span><br>
+              <span style="font-weight:normal; font-size:9px; color:#777; display:block; margin-top:2px;">
+                "<a href="https://commons.wikimedia.org/wiki/File:Cirsium_vulgare_flower.jpg" target="_blank" rel="noopener" style="color:#555;">Cirsium vulgare flower</a>" by Bidgee (<a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener" style="color:#555;">CC BY-SA 3.0</a>)
+              </span>
+            </div>
+          </div>
+          <div class="help-photo-card">
+            <img src="https://commons.wikimedia.org/wiki/Special:Redirect/file/Cirsium_vulgare,_pappus,_speerdistel.jpg?width=800" alt="④ 綿毛・種ができている状態 / &quot;Cirsium vulgare, pappus, speerdistel&quot; by Rasbak (CC BY-SA 3.0)" onclick="zoomHelpPhoto(this.src, this.alt)">
+            <div class="help-photo-caption">
+              ④ 綿毛・種ができている状態<br>
+              <span style="font-weight:normal; color:#555;">刈り取り放置厳禁！袋に密閉して処分</span><br>
+              <span style="font-weight:normal; font-size:9px; color:#777; display:block; margin-top:2px;">
+                "<a href="https://commons.wikimedia.org/wiki/File:Cirsium_vulgare,_pappus,_speerdistel.jpg" target="_blank" rel="noopener" style="color:#555;">Cirsium vulgare, pappus, speerdistel</a>" by Rasbak (<a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener" style="color:#555;">CC BY-SA 3.0</a>)
+              </span>
+            </div>
+          </div>
+        </div>
+        <div style="font-size:10px; color:#777; text-align:right; margin-top:-6px; margin-bottom:8px;">
+          ※写真をクリックすると拡大します（出典: Wikimedia Commons / <a href="https://creativecommons.org/licenses/by-sa/3.0/deed.ja" target="_blank" rel="noopener" style="color:#555;">CC BY-SA 3.0</a>・PD）
+        </div>
+
+        <div class="compare-box">
+          <strong>🔍 在来種（ノアザミ・タイアザミ等）との3秒見分けチェック</strong><br>
+          <strong>【① 地面に広がる葉（ロゼット）の時期】</strong><br>
+          ・葉のフチだけでなく<strong>「葉の表面（おもて面）」全体にも硬いトゲ毛</strong>がビッシリ生えていてザラザラ・チクチクする（日本の在来アザミは葉の表面がツルッとしている）。<br>
+          ・葉が平らではなく、上下にグニャグニャと<strong>立体的に波打ち</strong>、中心部が白い綿毛で粉っぽく見える。<br><br>
+          <strong>【②〜④ 茎が伸びた後の時期】</strong><br>
+          ・葉だけでなく<strong>「茎そのもの」にも鋭いトゲ付きのヒレ（翼）</strong>がある（在来アザミは茎にヒレがない）。<br>
+          ・花の下の緑色の部分（総苞）が<strong>粘らない</strong>（春〜初夏の在来種ノアザミはベタベタと強く粘る）。
+        </div>
+      </div>
+
+      <div class="help-section">
+        <h4>2. 駆除作業時の注意（ケガ＆種子の飛散防止）</h4>
+        <p>・トゲが革手袋を貫通するほど鋭いため、厚手の作業手袋やスコップ・トングを使用してください。<br>
+        ・<strong>③開花後〜④綿毛の時期</strong>に刈り取って放置すると、種が熟して飛散します。必ず花や綿毛をビニール袋に密閉し、燃えるゴミとして処分（または熱湯処理・黒袋での天日熱処理）してください。</p>
+      </div>
+
+      <div class="help-section">
+        <h4>3. 私有地（黄色ピン）とプライバシーのルール</h4>
+        <p>・個人宅の庭や駐車場、農地などの私有地で発見した場合は、<strong>「🟡 未駆除：私有地・個人宅内」</strong>を選んで記録してください。<br>
+        ・<strong>黄色ピンの場所へ第三者が無断で立ち入って駆除することはやめてください</strong>（住人ご本人による駆除、または所有者の許可を得てからの駆除をお願いします）。<br>
+        ・写真を撮影する際は、表札や部屋の中、車のナンバー等が写らないよう植物のアップを撮影してください。</p>
+      </div>
+
+      <button class="btn-primary" onclick="closeHelpModal()">閉じる</button>
+    </div>
+  </div>
+
+  <!-- 共通：画面内での写真拡大ビューア -->
+  <div id="photoZoomOverlay" onclick="this.style.display='none'" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:3000; justify-content:center; align-items:center; flex-direction:column; padding:16px; cursor:zoom-out;">
+    <img id="photoZoomImg" src="" style="max-width:95%; max-height:80vh; border-radius:8px; border:2px solid #fff; box-shadow:0 4px 20px rgba(0,0,0,0.5);">
+    <div id="photoZoomCaption" style="color:#fff; font-weight:bold; margin-top:10px; font-size:14px; text-align:center;"></div>
+    <div style="color:#ccc; font-size:12px; margin-top:4px;">（画面のどこかをクリックすると閉じます）</div>
+  </div>
+  <script>
+    function zoomHelpPhoto(src, caption) {
+      document.getElementById('photoZoomImg').src = src;
+      document.getElementById('photoZoomCaption').textContent = caption;
+      document.getElementById('photoZoomOverlay').style.display = 'flex';
+    }
+  </script>
+
+  <!-- ⑤ 管理者専用パネルモーダル（一覧管理・完全削除） -->
+  <div id="adminModal" class="modal-overlay">
+    <div class="modal-card" style="max-width: 600px;">
+      <div class="modal-header">
+        <div class="modal-title" style="color:#d32f2f;">🛠️ 管理者専用：全ピン管理パネル</div>
+        <button class="close-btn" onclick="closeAdminModal()">×</button>
+      </div>
+      <p style="font-size:12px; color:#555; margin-bottom:10px;">
+        ※取り消し報告されたピンやイタズラ投稿を一覧で確認し、クラウド上から完全削除できます。
+      </p>
+      <div id="adminPinList" style="max-height: 55vh; overflow-y: auto; border:1px solid #ddd; border-radius:8px; padding:8px; background:#fafafa;"></div>
+      <button class="btn-secondary" onclick="logoutAdmin()" style="margin-top:12px;">🔒 管理者モードを終了（ログアウト）</button>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Firebase SDK (compat版：1ファイルHTMLでシンプルに動作) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+  <script>
+    // --- Firebase 接続設定 ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyB6m2BRZd9QpeTNdWqRlMh0shKMr6s-ooY",
+      authDomain: "ias-map-dd2be.firebaseapp.com",
+      projectId: "ias-map-dd2be",
+      storageBucket: "ias-map-dd2be.firebasestorage.app",
+      messagingSenderId: "949138668862",
+      appId: "1:949138668862:web:f9c161ff8fd8357b58c06f"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const pinsCollection = db.collection('pins');
+
+    // --- 状態管理 ---
+    const ADMIN_PIN = '1234'; // 管理者パスワード
+    const DEVICE_ID_KEY = 'oni_azami_device_uid_v1';
+    let myDeviceId = localStorage.getItem(DEVICE_ID_KEY);
+    if (!myDeviceId) {
+      myDeviceId = 'user_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now();
+      localStorage.setItem(DEVICE_ID_KEY, myDeviceId);
+    }
+    let currentSimulatedUser = myDeviceId;
+
+    let pins = [];
+    let tempLatLng = null;
+    let tempTimestamp = '';
+    let tempPhotoData = '';
+    let markersLayer = L.layerGroup();
+
+    // --- マップ初期化 ---
+    const map = L.map('map').setView([35.8077, 139.7242], 14);
+
+    const gsiPaleTile = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', {
+      attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院タイル（淡色地図）</a>',
+      maxZoom: 18
+    });
+
+    const gsiStdTile = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+      attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院タイル（標準地図）</a>',
+      maxZoom: 18
+    });
+
+    gsiStdTile.addTo(map);
+    L.control.layers({
+      "シンプル地図 (国土地理院・淡色)": gsiPaleTile,
+      "詳細地図 (国土地理院・標準)": gsiStdTile
+    }).addTo(map);
+
+    markersLayer.addTo(map);
+
+    // --- Firestore リアルタイム同期監視 ---
+    pinsCollection.onSnapshot(function(snapshot) {
+      const loadedPins = [];
+      snapshot.forEach(function(doc) {
+        const data = doc.data();
+        data.id = doc.id;
+        loadedPins.push(data);
+      });
+      // 新しい順（または作成日時順）に整列
+      loadedPins.sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
+      pins = loadedPins;
+      renderPins();
+      if (document.getElementById('adminModal').classList.contains('active')) {
+        renderAdminPinList();
+      }
+      const syncBadge = document.getElementById('syncStatus');
+      syncBadge.textContent = '🟢 クラウド同期中';
+      syncBadge.style.color = '#2e5a27';
+    }, function(error) {
+      console.error('Firestore同期エラー:', error);
+      const syncBadge = document.getElementById('syncStatus');
+      syncBadge.textContent = '⚠️ 通信エラー';
+      syncBadge.style.color = '#d32f2f';
+    });
+
+    // マップクリックで新規記録モーダルを開く
+    map.on('click', function(e) {
+      tempLatLng = e.latlng;
+      const now = new Date();
+      tempTimestamp = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      
+      document.getElementById('autoMetaInfo').innerHTML = 
+        `🕒 <strong>自動記録日時：</strong>${tempTimestamp}<br>📍 <strong>位置座標：</strong>北緯 ${tempLatLng.lat.toFixed(5)} / 東経 ${tempLatLng.lng.toFixed(5)}`;
+      
+      document.getElementById('photoInput').value = '';
+      document.getElementById('photoPreview').style.display = 'none';
+      tempPhotoData = '';
+      document.getElementById('memoInput').value = '';
+      document.querySelector('input[name="stage"][value="① 地面に広がる葉"]').checked = true;
+      document.querySelector('input[name="scale"][value="1〜5株（単体・少数）"]').checked = true;
+      document.querySelector('input[name="status"][value="unprocessed"]').checked = true;
+
+      document.getElementById('formModal').classList.add('active');
+    });
+
+    // 写真プレビュー（縮小＆Exif消去してBase64化）
+    function previewPhoto(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          const maxW = 500;
+          const scaleSize = maxW / img.width;
+          canvas.width = maxW;
+          canvas.height = img.height * scaleSize;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          tempPhotoData = canvas.toDataURL('image/jpeg', 0.65);
+          const preview = document.getElementById('photoPreview');
+          preview.src = tempPhotoData;
+          preview.style.display = 'block';
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // 登録ボタン押下時（写真なしチェック）
+    function trySubmitPin() {
+      if (!tempPhotoData) {
+        document.getElementById('noPhotoModal').classList.add('active');
+      } else {
+        confirmSubmitPin();
+      }
+    }
+
+    function closeNoPhotoModal() {
+      document.getElementById('noPhotoModal').classList.remove('active');
+    }
+
+    // 実際にピンをFirestoreへ保存
+    async function confirmSubmitPin() {
+      closeNoPhotoModal();
+      const btn = document.getElementById('submitPinBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ クラウドに記録中...';
+
+      const stage = document.querySelector('input[name="stage"]:checked').value;
+      const scale = document.querySelector('input[name="scale"]:checked').value;
+      const status = document.querySelector('input[name="status"]:checked').value;
+      const memo = document.getElementById('memoInput').value.trim();
+
+      const newPin = {
+        lat: tempLatLng.lat,
+        lng: tempLatLng.lng,
+        createdAt: tempTimestamp,
+        createdAtMs: Date.now(),
+        updatedAt: '',
+        stage: stage,
+        scale: scale,
+        status: status,
+        memo: memo,
+        photo: tempPhotoData,
+        eradicatedPhoto: '',
+        creatorId: currentSimulatedUser,
+        cancelReason: ''
+      };
+
+      try {
+        await pinsCollection.add(newPin);
+        closeFormModal();
+      } catch (err) {
+        console.error('保存エラー:', err);
+        alert('データの保存に失敗しました。通信環境を確認してください。');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'この内容でマップに記録する';
+      }
+    }
+
+    // ピン一覧を地図上に描画
+    function renderPins() {
+      markersLayer.clearLayers();
+      const showCanceled = document.getElementById('showCanceledToggle').checked;
+
+      let cRed = 0, cYellow = 0, cGreen = 0, cGray = 0;
+
+      pins.forEach(pin => {
+        if (pin.status === 'unprocessed') cRed++;
+        else if (pin.status === 'private_unprocessed') cYellow++;
+        else if (pin.status === 'eradicated') cGreen++;
+        else if (pin.status === 'canceled') cGray++;
+
+        if (pin.status === 'canceled' && !showCanceled) return;
+
+        let pinClass = 'pin-unprocessed';
+        let label = '!';
+        if (pin.status === 'private_unprocessed') { pinClass = 'pin-private'; label = '私'; }
+        if (pin.status === 'eradicated') { pinClass = 'pin-eradicated'; label = '済'; }
+        if (pin.status === 'canceled') { pinClass = 'pin-canceled'; label = '×'; }
+
+        const icon = L.divIcon({
+          className: '',
+          html: `<div class="custom-pin ${pinClass}">${label}</div>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+        });
+
+        const marker = L.marker([pin.lat, pin.lng], { icon: icon });
+        marker.on('click', () => openDetailModal(pin.id));
+        markersLayer.addLayer(marker);
+      });
+
+      document.getElementById('countRed').textContent = cRed;
+      document.getElementById('countYellow').textContent = cYellow;
+      document.getElementById('countGreen').textContent = cGreen;
+      document.getElementById('countGray').textContent = cGray;
+    }
+
+    let currentEditingPinId = null;
+    let tempEradicatePhotoData = '';
+
+    // ピン詳細・操作モーダルを表示
+    function openDetailModal(pinId) {
+      const pin = pins.find(p => p.id === pinId);
+      if (!pin) return;
+      currentEditingPinId = pinId;
+
+      document.getElementById('eradicateFormBox').style.display = 'none';
+      document.getElementById('detailContent').style.display = 'block';
+
+      let badgeHtml = '<span class="detail-badge badge-red">🔴 未駆除（公共の場所・応援求む）</span>';
+      if (pin.status === 'private_unprocessed') badgeHtml = '<span class="detail-badge badge-yellow">🟡 未駆除（私有地・無断立入NG）</span>';
+      if (pin.status === 'eradicated') badgeHtml = '<span class="detail-badge badge-green">🟢 駆除済み</span>';
+      if (pin.status === 'canceled') badgeHtml = '<span class="detail-badge badge-gray">⚪ 取り消し（見間違い・不在）</span>';
+
+      const isOwner = (pin.creatorId === currentSimulatedUser);
+      const ownerTag = isOwner ? '<span style="font-size:11px; color:#2e5a27; font-weight:bold;">（あなたの投稿）</span>' : '<span style="font-size:11px; color:#888;">（他ユーザーの投稿）</span>';
+
+      let privateAlertHtml = '';
+      if (pin.status === 'private_unprocessed') {
+        privateAlertHtml = `
+          <div style="background:#fff8e1; border:1px solid #ffca28; color:#b26a00; padding:10px; border-radius:8px; font-size:12px; margin-bottom:10px; line-height:1.5;">
+            ⚠️ <strong>私有地（個人宅・駐車場・農地等）の記録です</strong><br>
+            第三者が無断で敷地内に立ち入って駆除することはやめてください。住人ご本人による対応、または所有者の許可を得てからの駆除をお願いします。
+          </div>
+        `;
+      }
+
+      let html = `
+        <div>${badgeHtml} ${ownerTag}</div>
+        ${privateAlertHtml}
+        <div class="detail-box">
+          <div><strong>🕒 発見記録：</strong>${pin.createdAt}</div>
+          ${pin.updatedAt ? `<div><strong>🔄 最終更新：</strong>${pin.updatedAt}</div>` : ''}
+          <div><strong>🌱 生育状態：</strong>${pin.stage}</div>
+          <div><strong>📊 規模：</strong>${pin.scale}</div>
+          ${pin.memo ? `<div style="margin-top:6px;"><strong>📝 メモ：</strong><br>${escapeHtml(pin.memo)}</div>` : ''}
+          ${pin.cancelReason ? `<div style="margin-top:6px; color:#d32f2f;"><strong>⚠️ 取消理由：</strong>${escapeHtml(pin.cancelReason)}</div>` : ''}
+          ${pin.photo ? `<div style="margin-top:8px;"><strong>📷 発見時の写真（タップで拡大）：</strong><img src="${pin.photo}" class="photo-preview" style="display:block; margin-top:4px; cursor:zoom-in;" onclick="zoomHelpPhoto(this.src, '📷 発見時の写真')"></div>` : '<div style="font-size:12px; color:#888; margin-top:6px;">（発見時の写真なし）</div>'}
+          ${pin.eradicatedPhoto ? `<div style="margin-top:10px;"><strong>📷 駆除後の写真（タップで拡大）：</strong><img src="${pin.eradicatedPhoto}" class="photo-preview" style="display:block; margin-top:4px; cursor:zoom-in;" onclick="zoomHelpPhoto(this.src, '📷 駆除後の写真')"></div>` : ''}
+        </div>
+      `;
+
+      if (pin.status === 'unprocessed' || pin.status === 'private_unprocessed') {
+        const btnText = pin.status === 'private_unprocessed'
+          ? '🟢 駆除済みに変更（本人対応・許可取得済）'
+          : '🟢 駆除済みに変更する（写真・駆除報告）';
+        html += `<button class="btn-success" onclick="showEradicateForm('${pin.id}')">${btnText}</button>`;
+      }
+
+      if (pin.status !== 'canceled') {
+        html += `<button class="btn-warning" onclick="markAsCanceled('${pin.id}')">⚪ 取り消し報告（在来種だった・見当たらない）</button>`;
+      }
+
+      if (isOwner) {
+        html += `<button class="btn-danger" onclick="deletePin('${pin.id}')">🗑️ このピンを完全削除する（投稿者本人）</button>`;
+      } else if (isAdminMode) {
+        html += `<button class="btn-danger" onclick="deletePin('${pin.id}')">🛠️ 管理者権限でこのピンを完全削除する</button>`;
+      }
+
+      if (isAdminMode) {
+        html += `<button class="btn-secondary" onclick="backToAdminModal()" style="margin-top:10px; background:#e8eaf6; color:#283593;">⬅️ 管理者パネル（一覧）に戻る</button>`;
+      }
+
+      document.getElementById('detailContent').innerHTML = html;
+      formatCircleNumbers(document.getElementById('detailContent'));
+      document.getElementById('detailModal').classList.add('active');
+    }
+
+    function backToAdminModal() {
+      closeDetailModal();
+      openAdminModal();
+    }
+
+    function showEradicateForm(pinId) {
+      currentEditingPinId = pinId;
+      tempEradicatePhotoData = '';
+      document.getElementById('eradicatePhotoInput').value = '';
+      document.getElementById('eradicatePhotoPreview').style.display = 'none';
+      document.getElementById('eradicateMemoInput').value = '駆除完了しました（袋に密閉して処分済）';
+      
+      document.getElementById('detailContent').style.display = 'none';
+      document.getElementById('eradicateFormBox').style.display = 'block';
+    }
+
+    function cancelEradicateForm() {
+      document.getElementById('eradicateFormBox').style.display = 'none';
+      document.getElementById('detailContent').style.display = 'block';
+    }
+
+    function previewEradicatePhoto(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          const maxW = 500;
+          const scaleSize = maxW / img.width;
+          canvas.width = maxW;
+          canvas.height = img.height * scaleSize;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          tempEradicatePhotoData = canvas.toDataURL('image/jpeg', 0.65);
+          const preview = document.getElementById('eradicatePhotoPreview');
+          preview.src = tempEradicatePhotoData;
+          preview.style.display = 'block';
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // 駆除報告をFirestoreに保存
+    async function submitEradication() {
+      const pin = pins.find(p => p.id === currentEditingPinId);
+      if (!pin) return;
+
+      const btn = document.getElementById('submitEradicateBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ 更新中...';
+
+      const addNote = document.getElementById('eradicateMemoInput').value.trim();
+      const now = new Date();
+      const updatedAt = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      
+      const updateData = {
+        status: 'eradicated',
+        updatedAt: updatedAt
+      };
+      if (addNote) {
+        updateData.memo = (pin.memo ? pin.memo + ' / ' : '') + '【駆除追記】' + addNote;
+      }
+      if (tempEradicatePhotoData) {
+        updateData.eradicatedPhoto = tempEradicatePhotoData;
+      }
+
+      try {
+        await pinsCollection.doc(pin.id).update(updateData);
+        closeDetailModal();
+      } catch (err) {
+        console.error('更新エラー:', err);
+        alert('更新に失敗しました。');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'この内容で駆除完了にする';
+      }
+    }
+
+    // 取り消し報告（Firestore上でステータス更新）
+    async function markAsCanceled(pinId) {
+      const pin = pins.find(p => p.id === pinId);
+      if (!pin) return;
+      const reason = prompt('取り消し理由を入力してください（例：現地で確認したがすでになかった／アメリカオニアザミではなかった）：', '現地で確認したがすでになかった');
+      if (reason === null) return;
+
+      const now = new Date();
+      const updatedAt = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+      try {
+        await pinsCollection.doc(pinId).update({
+          status: 'canceled',
+          cancelReason: reason.trim() || '取り消し報告あり',
+          updatedAt: updatedAt
+        });
+        closeDetailModal();
+      } catch (err) {
+        console.error('取消エラー:', err);
+        alert('更新に失敗しました。');
+      }
+    }
+
+    // ピンの完全削除（Firestoreから削除）
+    async function deletePin(pinId) {
+      if (!confirm('このピンを完全に削除しますか？（クラウド上から消去され、元に戻せません）')) return;
+      try {
+        await pinsCollection.doc(pinId).delete();
+        closeDetailModal();
+      } catch (err) {
+        console.error('削除エラー:', err);
+        alert('削除に失敗しました。');
+      }
+    }
+
+    // --- 管理者専用モード（タイトル10回連続クリックで起動） ---
+    let isAdminMode = false;
+    let titleClickCount = 0;
+    let titleClickTimer = null;
+
+    function handleTitleClick() {
+      titleClickCount++;
+      clearTimeout(titleClickTimer);
+      titleClickTimer = setTimeout(() => { titleClickCount = 0; }, 1200);
+
+      if (titleClickCount >= 10) {
+        titleClickCount = 0;
+        if (isAdminMode) {
+          openAdminModal();
+          return;
+        }
+        const inputPin = prompt('【管理者ログイン】管理者パスワードを入力してください：');
+        if (inputPin === ADMIN_PIN) {
+          isAdminMode = true;
+          document.getElementById('adminPanelBtn').style.display = 'inline-block';
+          document.getElementById('toggleUserBtn').style.display = 'inline-block';
+          alert('管理者モードが有効になりました！右上の「🛠️ 管理者パネル」から全ピンの一括管理・削除が可能です。');
+          openAdminModal();
+        } else if (inputPin !== null) {
+          alert('パスワードが違います。');
+        }
+      }
+    }
+
+    function openAdminModal() {
+      renderAdminPinList();
+      document.getElementById('adminModal').classList.add('active');
+    }
+
+    function closeAdminModal() {
+      document.getElementById('adminModal').classList.remove('active');
+    }
+
+    function logoutAdmin() {
+      isAdminMode = false;
+      document.getElementById('adminPanelBtn').style.display = 'none';
+      document.getElementById('toggleUserBtn').style.display = 'none';
+      currentSimulatedUser = myDeviceId;
+      closeAdminModal();
+      alert('管理者モードを終了しました。');
+    }
+
+    // 管理者パネル内の全ピン一覧描画
+    function renderAdminPinList() {
+      const container = document.getElementById('adminPinList');
+      if (pins.length === 0) {
+        container.innerHTML = '<div style="padding:12px; text-align:center; color:#888;">現在クラウドに登録されているピンはありません。</div>';
+        return;
+      }
+      let html = '';
+      pins.forEach(pin => {
+        let statusText = '🔴 未駆除(公共)';
+        if (pin.status === 'private_unprocessed') statusText = '🟡 未駆除(私有地)';
+        if (pin.status === 'eradicated') statusText = '🟢 駆除済';
+        if (pin.status === 'canceled') statusText = '⚪ 取消報告';
+
+        html += `
+          <div style="border-bottom:1px solid #e0e0e0; padding:10px 6px; display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:13px;">
+            <div>
+              <div><strong>${statusText}</strong> | ${pin.createdAt} | ${pin.stage}</div>
+              <div style="color:#555; font-size:12px;">メモ: ${pin.memo ? escapeHtml(pin.memo) : 'なし'} ${pin.cancelReason ? `<span style="color:#d32f2f;">(取消理由: ${escapeHtml(pin.cancelReason)})</span>` : ''}</div>
+            </div>
+            <div style="display:flex; gap:6px; flex-shrink:0;">
+              <button onclick="focusPinFromAdmin('${pin.id}')" style="padding:6px 8px; border-radius:4px; border:1px solid #ccc; background:#fff; cursor:pointer; font-size:12px;">地図で確認</button>
+              <button onclick="deletePin('${pin.id}')" style="padding:6px 8px; border-radius:4px; border:none; background:#d32f2f; color:#fff; cursor:pointer; font-size:12px; font-weight:bold;">完全削除</button>
+            </div>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+      formatCircleNumbers(container);
+    }
+
+    function focusPinFromAdmin(pinId) {
+      const pin = pins.find(p => p.id === pinId);
+      if (!pin) return;
+      closeAdminModal();
+      map.setView([pin.lat, pin.lng], 16);
+      openDetailModal(pinId);
+    }
+
+    // 管理者テスト用：本人目線 ⇔ 他人目線の切り替え
+    function toggleTestUser() {
+      const btn = document.getElementById('toggleUserBtn');
+      if (currentSimulatedUser === myDeviceId) {
+        currentSimulatedUser = 'other_user_99';
+        btn.textContent = '👥 現在：別ユーザー（他人）目線';
+        btn.classList.add('other-user');
+      } else {
+        currentSimulatedUser = myDeviceId;
+        btn.textContent = '👤 現在：投稿者本人モード';
+        btn.classList.remove('other-user');
+      }
+    }
+
+    function closeFormModal() { document.getElementById('formModal').classList.remove('active'); }
+    function closeDetailModal() { document.getElementById('detailModal').classList.remove('active'); }
+    function openHelpModal() { document.getElementById('helpModal').classList.add('active'); }
+    function closeHelpModal() { document.getElementById('helpModal').classList.remove('active'); }
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    }
+
+    // ①〜④の丸数字を緑色の白抜きバッジに自動変換
+    const numBadgeStyle = `
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 19px; height: 19px; border-radius: 50%;
+      background: #2e5a27; color: #fff; font-size: 11px; font-weight: bold;
+      margin-right: 3px; vertical-align: text-bottom; line-height: 1;
+    `;
+    function formatCircleNumbers(root = document.body) {
+      const mapNum = { '①': '1', '②': '2', '③': '3', '④': '4' };
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
+      const nodes = [];
+      while (walker.nextNode()) nodes.push(walker.currentNode);
+      nodes.forEach(node => {
+        if (/[①②③④]/.test(node.nodeValue) && node.parentNode.tagName !== 'SCRIPT') {
+          const span = document.createElement('span');
+          span.innerHTML = node.nodeValue.replace(/[①②③④]/g, m => `<span style="${numBadgeStyle}">${mapNum[m]}</span>`);
+          node.parentNode.replaceChild(span, node);
+        }
+      });
+    }
+
+    // --- 現在地（GPS）取得・移動機能 ---
+    let currentLocationMarker = null;
+
+    function moveToCurrentLocation() {
+      const btn = document.getElementById('gpsBtn');
+      if (!navigator.geolocation) {
+        alert('お使いのブラウザは現在地（GPS）機能に対応していません。');
+        return;
+      }
+
+      btn.textContent = '⏳ 位置を取得中...';
+      btn.disabled = true;
+
+      navigator.geolocation.getCurrentPosition(
+        function(pos) {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+
+          map.setView([lat, lng], 17);
+
+          if (currentLocationMarker) {
+            map.removeLayer(currentLocationMarker);
+          }
+          const locIcon = L.divIcon({
+            className: '',
+            html: '<div class="current-loc-dot"></div>',
+            iconSize: [18, 18],
+            iconAnchor: [9, 9]
+          });
+          currentLocationMarker = L.marker([lat, lng], { icon: locIcon })
+            .addTo(map)
+            .bindPopup('📍 あなたの現在地')
+            .openPopup();
+
+          btn.textContent = '📍 現在地へ移動';
+          btn.disabled = false;
+        },
+        function(err) {
+          btn.textContent = '📍 現在地へ移動';
+          btn.disabled = false;
+          alert('現在地を取得できませんでした。ブラウザや端末の「位置情報の許可」がオンになっているか確認してください。');
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+
+    formatCircleNumbers();
+  </script>
+</body>
+</html>
