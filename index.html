@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="referrer" content="origin">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <title>アメリカオニアザミ 駆除作戦マップ</title>
   <!-- Leaflet CSS (地図表示用ライブラリ) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -480,11 +480,9 @@
     let currentAuthUid = null;
     let isAdminMode = false;
 
-    // 起動時に匿名認証または管理者セッションを確認
     auth.onAuthStateChanged(function(user) {
       if (user) {
         currentAuthUid = user.uid;
-        // メールアドレスでログインしている場合は管理者と判定
         if (!user.isAnonymous && user.email) {
           isAdminMode = true;
           document.getElementById('adminPanelBtn').style.display = 'inline-block';
@@ -493,7 +491,6 @@
           document.getElementById('adminPanelBtn').style.display = 'none';
         }
       } else {
-        // 未ログイン時は裏側で自動的に匿名認証トークンを取得（本人削除の保護用）
         auth.signInAnonymously().catch(function(err) {
           console.warn('匿名認証スキップ:', err.message);
         });
@@ -680,7 +677,7 @@
         cancelTempPin();
       } catch (err) {
         console.error('保存エラー:', err);
-        alert('データの保存に失敗しました。通信環境または入力内容を確認してください。');
+        alert('データの保存に失敗しました（理由: ' + (err.code || err.message) + '）');
       } finally {
         btn.disabled = false;
         btn.textContent = 'この内容でマップに記録する';
@@ -871,7 +868,7 @@
         closeDetailModal();
       } catch (err) {
         console.error('更新エラー:', err);
-        alert('更新に失敗しました。');
+        alert('更新に失敗しました（理由: ' + (err.code || err.message) + '）');
       } finally {
         btn.disabled = false;
         btn.textContent = 'この内容で駆除完了にする';
@@ -897,7 +894,7 @@
         closeDetailModal();
       } catch (err) {
         console.error('取消エラー:', err);
-        alert('更新に失敗しました。');
+        alert('更新に失敗しました（理由: ' + (err.code || err.message) + '）');
       }
     }
 
@@ -909,7 +906,7 @@
         closeDetailModal();
       } catch (err) {
         console.error('削除エラー:', err);
-        alert('削除権限がないか、通信エラーが発生しました。');
+        alert('削除できませんでした（理由: ' + (err.code || err.message) + '）\n※Firestoreのルール内の管理者UIDが一致しているか確認してください。');
       }
     }
 
@@ -956,7 +953,7 @@
         openAdminModal();
       } catch (err) {
         console.error('管理者ログイン失敗:', err);
-        alert('認証に失敗しました。メールアドレスまたはパスワードが正しくありません。');
+        alert('認証エラーの詳細：\nコード: ' + (err.code || '不明') + '\n内容: ' + (err.message || ''));
       } finally {
         btn.disabled = false;
         btn.textContent = 'ログインする';
