@@ -49,9 +49,47 @@
       background: #fff; color: #2e5a27; border: 2px solid #2e5a27;
       border-radius: 30px; padding: 10px 16px; font-size: 14px; font-weight: bold;
       box-shadow: 0 4px 12px rgba(0,0,0,0.3); cursor: pointer;
-      display: flex; align-items: center; gap: 6px;
+      display: flex; align-items: center; gap: 6px; transition: bottom 0.2s ease;
     }
     .gps-btn:active { transform: scale(0.96); background: #f1f8e9; }
+    .gps-btn.shifted { bottom: 135px; }
+
+    /* 仮ピン位置確認用の下部フローティングバー */
+    .temp-pin-bar {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      width: calc(100% - 28px); max-width: 440px;
+      background: #fff; border: 2px solid #1e88e5; border-radius: 14px;
+      padding: 12px 14px; z-index: 1500;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+      display: none; flex-direction: column; gap: 8px;
+    }
+    .temp-pin-bar.active { display: flex; }
+    .temp-pin-title { font-size: 13px; font-weight: bold; color: #1565c0; text-align: center; line-height: 1.4; }
+    .temp-pin-sub { font-size: 11px; color: #555; font-weight: normal; }
+    .temp-pin-actions { display: flex; gap: 8px; }
+    .btn-temp-confirm {
+      flex: 2; background: #2e5a27; color: #fff; border: none; padding: 11px 10px;
+      border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer;
+      box-shadow: 0 2px 6px rgba(46,90,39,0.3);
+    }
+    .btn-temp-cancel {
+      flex: 1; background: #e0e0e0; color: #333; border: none; padding: 11px 10px;
+      border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer;
+    }
+
+    /* 仮ピン（位置調整中）のアイコン */
+    @keyframes tempPulse {
+      0% { box-shadow: 0 0 0 0 rgba(30, 136, 229, 0.7), 0 3px 6px rgba(0,0,0,0.4); }
+      70% { box-shadow: 0 0 0 14px rgba(30, 136, 229, 0), 0 3px 6px rgba(0,0,0,0.4); }
+      100% { box-shadow: 0 0 0 0 rgba(30, 136, 229, 0), 0 3px 6px rgba(0,0,0,0.4); }
+    }
+    .temp-pin-marker {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: #1e88e5; border: 3px solid #fff;
+      color: #fff; font-size: 16px; font-weight: bold;
+      display: flex; align-items: center; justify-content: center;
+      animation: tempPulse 1.6s infinite; cursor: grab;
+    }
 
     /* 現在地を示す青い丸アイコン */
     .current-loc-dot {
@@ -160,6 +198,18 @@
   <!-- 地図本体 -->
   <div id="map"></div>
   <button id="gpsBtn" class="gps-btn" onclick="moveToCurrentLocation()">📍 現在地へ移動</button>
+
+  <!-- 仮ピン位置確認・微調整バー（地図タップ時に下部へ表示） -->
+  <div id="tempPinBar" class="temp-pin-bar">
+    <div class="temp-pin-title">
+      📍 ピンの位置はここで合っていますか？<br>
+      <span class="temp-pin-sub">（地図の再タップや、青いピンのドラッグで位置を微調整できます）</span>
+    </div>
+    <div class="temp-pin-actions">
+      <button class="btn-temp-confirm" onclick="openFormFromTempPin()">✅ この位置に記録する</button>
+      <button class="btn-temp-cancel" onclick="cancelTempPin()">キャンセル</button>
+    </div>
+  </div>
 
   <!-- ① 新規記録モーダル（1画面完結） -->
   <div id="formModal" class="modal-overlay">
@@ -413,6 +463,7 @@
 
     let pins = [];
     let tempLatLng = null;
+    let tempMarker = null;
     let tempTimestamp = '';
     let tempPhotoData = '';
     let markersLayer = L.layerGroup();
@@ -446,7 +497,6 @@
         data.id = doc.id;
         loadedPins.push(data);
       });
-      // 新しい順（または作成日時順）に整列
       loadedPins.sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
       pins = loadedPins;
       renderPins();
@@ -463,9 +513,47 @@
       syncBadge.style.color = '#d32f2f';
     });
 
-    // マップクリックで新規記録モーダルを開く
+    // --- マップクリックで「仮ピン（位置調整用）」を表示・移動 ---
     map.on('click', function(e) {
-      tempLatLng = e.latlng;
+      placeOrMoveTempPin(e.latlng);
+    });
+
+    function placeOrMoveTempPin(latlng) {
+      tempLatLng = latlng;
+
+      if (!tempMarker) {
+        const tempIcon = L.divIcon({
+          className: '',
+          html: '<div class="temp-pin-marker">＋</div>',
+          iconSize: [30, 30],
+          iconAnchor: [15, 15]
+        });
+        tempMarker = L.marker(latlng, { icon: tempIcon, draggable: true, zIndexOffset: 1000 }).addTo(map);
+        tempMarker.on('dragend', function(ev) {
+          tempLatLng = ev.target.getLatLng();
+        });
+      } else {
+        tempMarker.setLatLng(latlng);
+      }
+
+      document.getElementById('tempPinBar').classList.add('active');
+      document.getElementById('gpsBtn').classList.add('shifted');
+    }
+
+    // 仮ピンをキャンセルして消す
+    function cancelTempPin() {
+      if (tempMarker) {
+        map.removeLayer(tempMarker);
+        tempMarker = null;
+      }
+      tempLatLng = null;
+      document.getElementById('tempPinBar').classList.remove('active');
+      document.getElementById('gpsBtn').classList.remove('shifted');
+    }
+
+    // 仮ピンの位置で確定し、新規記録モーダルを開く
+    function openFormFromTempPin() {
+      if (!tempLatLng) return;
       const now = new Date();
       tempTimestamp = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
       
@@ -481,7 +569,7 @@
       document.querySelector('input[name="status"][value="unprocessed"]').checked = true;
 
       document.getElementById('formModal').classList.add('active');
-    });
+    }
 
     // 写真プレビュー（縮小＆Exif消去してBase64化）
     function previewPhoto(event) {
@@ -552,6 +640,7 @@
       try {
         await pinsCollection.add(newPin);
         closeFormModal();
+        cancelTempPin(); // 保存完了後に仮ピンを消去
       } catch (err) {
         console.error('保存エラー:', err);
         alert('データの保存に失敗しました。通信環境を確認してください。');
