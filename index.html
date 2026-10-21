@@ -23,8 +23,6 @@
       background: #fff; color: #2e5a27; border: none; padding: 6px 10px;
       border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer;
     }
-    .btn-header.test-mode { background: #ffeb3b; color: #333; }
-    .btn-header.test-mode.other-user { background: #ff9800; color: #fff; }
 
     /* ステータスバー（凡例・フィルター） */
     .status-bar {
@@ -138,7 +136,7 @@
     .radio-option:hover { background: #f1f8e9; border-color: #81c784; }
     .radio-option input { transform: scale(1.2); }
 
-    textarea, input[type="text"], input[type="password"] {
+    textarea, input[type="text"], input[type="email"], input[type="password"] {
       width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px;
     }
     .photo-preview { width: 100%; max-height: 180px; object-fit: cover; border-radius: 8px; margin-top: 8px; display: none; border: 1px solid #ddd; }
@@ -174,7 +172,6 @@
     <div class="app-title" onclick="handleTitleClick()" style="cursor:pointer; user-select:none;" title="">🌿 アメリカオニアザミ 駆除作戦マップ</div>
     <div class="header-btns">
       <button id="adminPanelBtn" class="btn-header" style="display:none; background:#d32f2f; color:#fff;" onclick="openAdminModal()">🛠️ 管理者パネル</button>
-      <button id="toggleUserBtn" class="btn-header test-mode" style="display:none;" onclick="toggleTestUser()">👤 現在：投稿者本人モード</button>
       <button class="btn-header" onclick="openHelpModal()">[?] 見分け方・注意点</button>
     </div>
   </header>
@@ -266,15 +263,15 @@
 
       <!-- メモ -->
       <div class="form-group">
-        <label class="form-label">📝 メモ（任意：場所の目印や状況など）</label>
-        <textarea id="memoInput" rows="2" placeholder="例：歩道の植え込みの端。スコップがあると抜きやすいです。"></textarea>
+        <label class="form-label">📝 メモ（任意：場所の目印や状況など・500文字以内）</label>
+        <textarea id="memoInput" rows="2" maxlength="500" placeholder="例：歩道の植え込みの端。スコップがあると抜きやすいです。"></textarea>
       </div>
 
       <button id="submitPinBtn" class="btn-primary" onclick="trySubmitPin()">この内容でマップに記録する</button>
     </div>
   </div>
 
-  <!-- ② 写真なし確認ポップアップ（任意だが推奨のクッション画面） -->
+  <!-- ② 写真なし確認ポップアップ -->
   <div id="noPhotoModal" class="modal-overlay">
     <div class="modal-card" style="max-width: 380px; text-align: center;">
       <h3 style="color:#d32f2f; margin-bottom:10px;">📷 写真が添付されていません</h3>
@@ -295,7 +292,7 @@
       </div>
       <div id="detailContent"></div>
 
-      <!-- 駆除報告フォーム（ボタンを押した時に開く） -->
+      <!-- 駆除報告フォーム -->
       <div id="eradicateFormBox" style="display:none; margin-top:12px; padding-top:12px; border-top:2px dashed #43a047;">
         <div style="font-weight:bold; color:#2e5a27; margin-bottom:10px; font-size:15px;">🟢 駆除報告の入力</div>
         <div class="form-group">
@@ -308,7 +305,7 @@
         </div>
         <div class="form-group">
           <label class="form-label">📝 駆除メモ（任意）</label>
-          <textarea id="eradicateMemoInput" rows="2" placeholder="例：根から抜き取り、ビニール袋に密閉して処分しました。"></textarea>
+          <textarea id="eradicateMemoInput" rows="2" maxlength="300" placeholder="例：根から抜き取り、ビニール袋に密閉して処分しました。"></textarea>
         </div>
         <button id="submitEradicateBtn" class="btn-success" onclick="submitEradication()">この内容で駆除完了にする</button>
         <button class="btn-secondary" onclick="cancelEradicateForm()">キャンセル</button>
@@ -316,7 +313,7 @@
     </div>
   </div>
 
-  <!-- ④ 見分け方・注意点ヘルプモーダル（複数枚の写真ギャラリー付き） -->
+  <!-- ④ 見分け方・注意点ヘルプモーダル -->
   <div id="helpModal" class="modal-overlay">
     <div class="modal-card" style="max-width: 540px;">
       <div class="modal-header">
@@ -414,7 +411,26 @@
     }
   </script>
 
-  <!-- ⑤ 管理者専用パネルモーダル（一覧管理・完全削除） -->
+  <!-- ⑤ 管理者ログイン用モーダル（Firebase Auth連携・HTML内にパスワード一切なし） -->
+  <div id="adminLoginModal" class="modal-overlay">
+    <div class="modal-card" style="max-width: 380px;">
+      <div class="modal-header">
+        <div class="modal-title" style="color:#d32f2f;">🔐 管理者認証（Firebase Auth）</div>
+        <button class="close-btn" onclick="closeAdminLoginModal()">×</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">管理者メールアドレス</label>
+        <input type="email" id="adminEmailInput" placeholder="admin@example.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">パスワード</label>
+        <input type="password" id="adminPassInput" placeholder="パスワードを入力">
+      </div>
+      <button id="adminLoginSubmitBtn" class="btn-primary" onclick="submitAdminLogin()">ログインする</button>
+    </div>
+  </div>
+
+  <!-- ⑥ 管理者専用パネルモーダル（一覧管理・完全削除） -->
   <div id="adminModal" class="modal-overlay">
     <div class="modal-card" style="max-width: 600px;">
       <div class="modal-header">
@@ -432,8 +448,9 @@
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- Firebase SDK (compat版：1ファイルHTMLでシンプルに動作) -->
+  <!-- Firebase SDK (App + Auth + Firestore) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
   <script>
@@ -448,18 +465,40 @@
     };
 
     firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
     const db = firebase.firestore();
     const pinsCollection = db.collection('pins');
 
-    // --- 状態管理 ---
-    const ADMIN_PIN = '1234'; // 管理者パスワード
+    // --- 認証・状態管理（HTML内にパスワードは一切保持しない） ---
     const DEVICE_ID_KEY = 'oni_azami_device_uid_v1';
     let myDeviceId = localStorage.getItem(DEVICE_ID_KEY);
     if (!myDeviceId) {
       myDeviceId = 'user_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now();
       localStorage.setItem(DEVICE_ID_KEY, myDeviceId);
     }
-    let currentSimulatedUser = myDeviceId;
+
+    let currentAuthUid = null;
+    let isAdminMode = false;
+
+    // 起動時に匿名認証または管理者セッションを確認
+    auth.onAuthStateChanged(function(user) {
+      if (user) {
+        currentAuthUid = user.uid;
+        // メールアドレスでログインしている場合は管理者と判定
+        if (!user.isAnonymous && user.email) {
+          isAdminMode = true;
+          document.getElementById('adminPanelBtn').style.display = 'inline-block';
+        } else {
+          isAdminMode = false;
+          document.getElementById('adminPanelBtn').style.display = 'none';
+        }
+      } else {
+        // 未ログイン時は裏側で自動的に匿名認証トークンを取得（本人削除の保護用）
+        auth.signInAnonymously().catch(function(err) {
+          console.warn('匿名認証スキップ:', err.message);
+        });
+      }
+    });
 
     let pins = [];
     let tempLatLng = null;
@@ -540,7 +579,6 @@
       document.getElementById('gpsBtn').classList.add('shifted');
     }
 
-    // 仮ピンをキャンセルして消す
     function cancelTempPin() {
       if (tempMarker) {
         map.removeLayer(tempMarker);
@@ -551,7 +589,6 @@
       document.getElementById('gpsBtn').classList.remove('shifted');
     }
 
-    // 仮ピンの位置で確定し、新規記録モーダルを開く
     function openFormFromTempPin() {
       if (!tempLatLng) return;
       const now = new Date();
@@ -596,7 +633,6 @@
       reader.readAsDataURL(file);
     }
 
-    // 登録ボタン押下時（写真なしチェック）
     function trySubmitPin() {
       if (!tempPhotoData) {
         document.getElementById('noPhotoModal').classList.add('active');
@@ -619,7 +655,7 @@
       const stage = document.querySelector('input[name="stage"]:checked').value;
       const scale = document.querySelector('input[name="scale"]:checked').value;
       const status = document.querySelector('input[name="status"]:checked').value;
-      const memo = document.getElementById('memoInput').value.trim();
+      const memo = document.getElementById('memoInput').value.trim().substring(0, 500);
 
       const newPin = {
         lat: tempLatLng.lat,
@@ -633,17 +669,18 @@
         memo: memo,
         photo: tempPhotoData,
         eradicatedPhoto: '',
-        creatorId: currentSimulatedUser,
+        creatorId: myDeviceId,
+        creatorUid: currentAuthUid || '',
         cancelReason: ''
       };
 
       try {
         await pinsCollection.add(newPin);
         closeFormModal();
-        cancelTempPin(); // 保存完了後に仮ピンを消去
+        cancelTempPin();
       } catch (err) {
         console.error('保存エラー:', err);
-        alert('データの保存に失敗しました。通信環境を確認してください。');
+        alert('データの保存に失敗しました。通信環境または入力内容を確認してください。');
       } finally {
         btn.disabled = false;
         btn.textContent = 'この内容でマップに記録する';
@@ -706,7 +743,7 @@
       if (pin.status === 'eradicated') badgeHtml = '<span class="detail-badge badge-green">🟢 駆除済み</span>';
       if (pin.status === 'canceled') badgeHtml = '<span class="detail-badge badge-gray">⚪ 取り消し（見間違い・不在）</span>';
 
-      const isOwner = (pin.creatorId === currentSimulatedUser);
+      const isOwner = (currentAuthUid && pin.creatorUid === currentAuthUid) || (pin.creatorId === myDeviceId);
       const ownerTag = isOwner ? '<span style="font-size:11px; color:#2e5a27; font-weight:bold;">（あなたの投稿）</span>' : '<span style="font-size:11px; color:#888;">（他ユーザーの投稿）</span>';
 
       let privateAlertHtml = '';
@@ -723,10 +760,10 @@
         <div>${badgeHtml} ${ownerTag}</div>
         ${privateAlertHtml}
         <div class="detail-box">
-          <div><strong>🕒 発見記録：</strong>${pin.createdAt}</div>
-          ${pin.updatedAt ? `<div><strong>🔄 最終更新：</strong>${pin.updatedAt}</div>` : ''}
-          <div><strong>🌱 生育状態：</strong>${pin.stage}</div>
-          <div><strong>📊 規模：</strong>${pin.scale}</div>
+          <div><strong>🕒 発見記録：</strong>${escapeHtml(pin.createdAt)}</div>
+          ${pin.updatedAt ? `<div><strong>🔄 最終更新：</strong>${escapeHtml(pin.updatedAt)}</div>` : ''}
+          <div><strong>🌱 生育状態：</strong>${escapeHtml(pin.stage)}</div>
+          <div><strong>📊 規模：</strong>${escapeHtml(pin.scale)}</div>
           ${pin.memo ? `<div style="margin-top:6px;"><strong>📝 メモ：</strong><br>${escapeHtml(pin.memo)}</div>` : ''}
           ${pin.cancelReason ? `<div style="margin-top:6px; color:#d32f2f;"><strong>⚠️ 取消理由：</strong>${escapeHtml(pin.cancelReason)}</div>` : ''}
           ${pin.photo ? `<div style="margin-top:8px;"><strong>📷 発見時の写真（タップで拡大）：</strong><img src="${pin.photo}" class="photo-preview" style="display:block; margin-top:4px; cursor:zoom-in;" onclick="zoomHelpPhoto(this.src, '📷 発見時の写真')"></div>` : '<div style="font-size:12px; color:#888; margin-top:6px;">（発見時の写真なし）</div>'}
@@ -814,7 +851,7 @@
       btn.disabled = true;
       btn.textContent = '⏳ 更新中...';
 
-      const addNote = document.getElementById('eradicateMemoInput').value.trim();
+      const addNote = document.getElementById('eradicateMemoInput').value.trim().substring(0, 300);
       const now = new Date();
       const updatedAt = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
       
@@ -823,7 +860,7 @@
         updatedAt: updatedAt
       };
       if (addNote) {
-        updateData.memo = (pin.memo ? pin.memo + ' / ' : '') + '【駆除追記】' + addNote;
+        updateData.memo = ((pin.memo ? pin.memo + ' / ' : '') + '【駆除追記】' + addNote).substring(0, 1000);
       }
       if (tempEradicatePhotoData) {
         updateData.eradicatedPhoto = tempEradicatePhotoData;
@@ -854,7 +891,7 @@
       try {
         await pinsCollection.doc(pinId).update({
           status: 'canceled',
-          cancelReason: reason.trim() || '取り消し報告あり',
+          cancelReason: (reason.trim() || '取り消し報告あり').substring(0, 200),
           updatedAt: updatedAt
         });
         closeDetailModal();
@@ -864,7 +901,7 @@
       }
     }
 
-    // ピンの完全削除（Firestoreから削除）
+    // ピンの完全削除（Firestoreから削除：ルールにより管理者または作成者本人のみ成功する）
     async function deletePin(pinId) {
       if (!confirm('このピンを完全に削除しますか？（クラウド上から消去され、元に戻せません）')) return;
       try {
@@ -872,12 +909,11 @@
         closeDetailModal();
       } catch (err) {
         console.error('削除エラー:', err);
-        alert('削除に失敗しました。');
+        alert('削除権限がないか、通信エラーが発生しました。');
       }
     }
 
-    // --- 管理者専用モード（タイトル10回連続クリックで起動） ---
-    let isAdminMode = false;
+    // --- 管理者専用モード（タイトル10回連続クリックでFirebase Authログイン画面を起動） ---
     let titleClickCount = 0;
     let titleClickTimer = null;
 
@@ -892,16 +928,38 @@
           openAdminModal();
           return;
         }
-        const inputPin = prompt('【管理者ログイン】管理者パスワードを入力してください：');
-        if (inputPin === ADMIN_PIN) {
-          isAdminMode = true;
-          document.getElementById('adminPanelBtn').style.display = 'inline-block';
-          document.getElementById('toggleUserBtn').style.display = 'inline-block';
-          alert('管理者モードが有効になりました！右上の「🛠️ 管理者パネル」から全ピンの一括管理・削除が可能です。');
-          openAdminModal();
-        } else if (inputPin !== null) {
-          alert('パスワードが違います。');
-        }
+        document.getElementById('adminEmailInput').value = '';
+        document.getElementById('adminPassInput').value = '';
+        document.getElementById('adminLoginModal').classList.add('active');
+      }
+    }
+
+    function closeAdminLoginModal() {
+      document.getElementById('adminLoginModal').classList.remove('active');
+    }
+
+    async function submitAdminLogin() {
+      const email = document.getElementById('adminEmailInput').value.trim();
+      const pass = document.getElementById('adminPassInput').value;
+      if (!email || !pass) {
+        alert('メールアドレスとパスワードを入力してください。');
+        return;
+      }
+      const btn = document.getElementById('adminLoginSubmitBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ 認証中...';
+
+      try {
+        await auth.signInWithEmailAndPassword(email, pass);
+        closeAdminLoginModal();
+        alert('管理者として認証されました！');
+        openAdminModal();
+      } catch (err) {
+        console.error('管理者ログイン失敗:', err);
+        alert('認証に失敗しました。メールアドレスまたはパスワードが正しくありません。');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'ログインする';
       }
     }
 
@@ -914,11 +972,10 @@
       document.getElementById('adminModal').classList.remove('active');
     }
 
-    function logoutAdmin() {
+    async function logoutAdmin() {
+      await auth.signOut();
       isAdminMode = false;
       document.getElementById('adminPanelBtn').style.display = 'none';
-      document.getElementById('toggleUserBtn').style.display = 'none';
-      currentSimulatedUser = myDeviceId;
       closeAdminModal();
       alert('管理者モードを終了しました。');
     }
@@ -940,7 +997,7 @@
         html += `
           <div style="border-bottom:1px solid #e0e0e0; padding:10px 6px; display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:13px;">
             <div>
-              <div><strong>${statusText}</strong> | ${pin.createdAt} | ${pin.stage}</div>
+              <div><strong>${statusText}</strong> | ${escapeHtml(pin.createdAt)} | ${escapeHtml(pin.stage)}</div>
               <div style="color:#555; font-size:12px;">メモ: ${pin.memo ? escapeHtml(pin.memo) : 'なし'} ${pin.cancelReason ? `<span style="color:#d32f2f;">(取消理由: ${escapeHtml(pin.cancelReason)})</span>` : ''}</div>
             </div>
             <div style="display:flex; gap:6px; flex-shrink:0;">
@@ -962,25 +1019,12 @@
       openDetailModal(pinId);
     }
 
-    // 管理者テスト用：本人目線 ⇔ 他人目線の切り替え
-    function toggleTestUser() {
-      const btn = document.getElementById('toggleUserBtn');
-      if (currentSimulatedUser === myDeviceId) {
-        currentSimulatedUser = 'other_user_99';
-        btn.textContent = '👥 現在：別ユーザー（他人）目線';
-        btn.classList.add('other-user');
-      } else {
-        currentSimulatedUser = myDeviceId;
-        btn.textContent = '👤 現在：投稿者本人モード';
-        btn.classList.remove('other-user');
-      }
-    }
-
     function closeFormModal() { document.getElementById('formModal').classList.remove('active'); }
     function closeDetailModal() { document.getElementById('detailModal').classList.remove('active'); }
     function openHelpModal() { document.getElementById('helpModal').classList.add('active'); }
     function closeHelpModal() { document.getElementById('helpModal').classList.remove('active'); }
     function escapeHtml(str) {
+      if (!str) return '';
       return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
     }
 
